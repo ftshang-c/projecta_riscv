@@ -8,7 +8,7 @@ class InsMem(object):
     def __init__(self, name, ioDir):
         self.id = name
 
-        with open(ioDir + "\\imem.txt") as im:
+        with open(os.path.join(ioDir, "imem.txt")) as im:
             self.IMem = [data.replace("\n", "") for data in im.readlines()]
 
     def readInstr(self, ReadAddress):
@@ -50,11 +50,11 @@ class DataMem(object):
     def readInstr(self, ReadAddress):
         # read data memory
         # return 32 bit hex val
-        pass
+        return self.DMem[ReadAddress]
 
     def writeDataMem(self, Address, WriteData):
         # write data into byte addressable memory
-        pass
+        self.DMem[Address] = WriteData
 
     def outputDataMem(self):
         resPath = self.ioDir + "\\" + self.id + "_DMEMResult.txt"
@@ -69,11 +69,11 @@ class RegisterFile(object):
 
     def readRF(self, Reg_addr):
         # Fill in
-        pass
+        return self.Registers[Reg_addr]
 
     def writeRF(self, Reg_addr, Wrt_reg_data):
         # Fill in
-        pass
+        self.Registers[Reg_addr] = Wrt_reg_data
 
     def outputRF(self, cycle):
         op = ["-" * 70 + "\n",
@@ -118,48 +118,66 @@ class SingleStageCore(Core):
     def __init__(self, ioDir, imem, dmem):
         super(SingleStageCore, self).__init__(ioDir + "\\SS_", imem, dmem)
         self.opFilePath = ioDir + "\\StateResult_SS.txt"
+        self.decoded = {}
+        self.officialHalt = False
+
+    def instruction_fetch(self):
+        PC_value = self.state.IF["PC"]
+        return self.ext_imem.readInstr(PC_value)
+
+    def instruction_decode(self, instruction):
+
+        opcode = instruction[25:32]
+
+        # R Type
+        if opcode == "0110011":
+            print("R type instruction.")
+        elif opcode == "0010011":
+            print("I type instruction.")
+        elif opcode == "1101111":
+            print("J type instruction.")
+        elif opcode == "1100011":
+            print("B type instruction")
+        elif opcode == "0000011":
+            print("Load instruction")
+        elif opcode == "0100011":
+            print("Store instruction")
+        else:
+            print("Halt instruction")
+            self.state.IF["nop"] = True
 
     def step(self):
         # Your implementation
 
         # 1. Instruction Fetch
-        PC_value = self.state.IF["PC"]
-        address = self.ext_imem.readInstr(PC_value)
-        self.state.ID["Instr"] = address
+        instruction = self.instruction_fetch()
         # Adder for the next PC.
-        self.nextState.IF["PC"] += 4
+        print(self.state.IF["PC"])
 
         # 2. Instruction Decode
-        opcode = address[25:32]
+        self.instruction_decode(instruction)
 
-        if (opcode == "1111111"):
-            self.halted = True
-            self.state.IF["nop"] = True
-        else:
-            self.halted = False
+        if not self.state.IF["nop"]:
+            self.state.IF["PC"] += 4
 
-        if (opcode == '0000011'):
-            print("load word instruction")
-
-
-        elif (opcode == "0110011"):
-            print("b-type instruction")
-        elif (opcode == '1111111'):
-            print("halt instruction")
         # 3. Execute
 
         # 4. Memory Access
 
         # 5. Write Back
 
-        if self.state.IF["nop"]:
+
+        if self.state.IF["nop"] and self.officialHalt:
             self.halted = True
+        elif self.state.IF["nop"] and not self.officialHalt:
+            self.officialHalt = True
 
         self.myRF.outputRF(self.cycle)  # dump RF
-        self.printState(self.nextState,
+        self.printState(self.state,
                         self.cycle)  # print states after executing cycle 0, cycle 1, cycle 2 ...
 
-        self.state = self.nextState  # The end of the cycle and updates the current state with the values calculated in this cycle
+        # self.state = self.nextState  # The end of the cycle and updates the
+        # current state with the values calculated in this cycle
         self.cycle += 1
 
     def printState(self, state, cycle):
