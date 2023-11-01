@@ -118,12 +118,24 @@ class SingleStageCore(Core):
     def __init__(self, ioDir, imem, dmem):
         super(SingleStageCore, self).__init__(ioDir + "\\SS_", imem, dmem)
         self.opFilePath = ioDir + "\\StateResult_SS.txt"
-        self.decoded = {}
-        self.officialHalt = False
+        self.decoded = None
+        self.lastInstruction = None
 
     def instruction_fetch(self):
         PC_value = self.state.IF["PC"]
         return self.ext_imem.readInstr(PC_value)
+
+    def string_to_decimal(self, s):
+        sum = 0
+        exponent = len(s) - 1
+
+        for i in range(len(s)):
+            if exponent == len(s) - 1:
+                sum += -(pow(2, exponent) * int(s[i]))
+            else:
+                sum += (pow(2, exponent) * int(s[i]))
+            exponent -= 1
+        return sum
 
     def instruction_decode(self, instruction):
 
@@ -131,24 +143,69 @@ class SingleStageCore(Core):
 
         # R Type
         if opcode == "0110011":
-            print("R type instruction.")
+            print("R Type instruction.")
+            self.decoded["opcode"] = opcode
+            self.decoded["rd"] = self.string_to_decimal(instruction[20:25])
+            self.decoded["funct3"] = instruction[17:20]
+            self.decoded["rs1"] = self.string_to_decimal(instruction[12:17])
+            self.decoded["rs2"] = self.string_to_decimal(instruction[7:12])
+            self.decoded["funct7"] = instruction[0:7]
+            self.decoded["type"] = "R"
+
         elif opcode == "0010011":
-            print("I type instruction.")
+            print("I Type instruction.")
+            self.decoded["opcode"] = opcode
+            self.decoded["rd"] = self.string_to_decimal(instruction[20:25])
+            self.decoded["funct3"] = instruction[17:20]
+            self.decoded["rs1"] = self.string_to_decimal(instruction[12:17])
+            self.decoded["immediate"] = self.string_to_decimal(instruction[
+                                                              0:12])
+            self.decoded["type"] = "I"
+
         elif opcode == "1101111":
             print("J type instruction.")
+
         elif opcode == "1100011":
             print("B type instruction")
+
         elif opcode == "0000011":
             print("Load instruction")
+            self.decoded["opcode"] = opcode
+            self.decoded["rd"] = self.string_to_decimal(instruction[20:25])
+            self.decoded["funct3"] = instruction[17:20]
+            self.decoded["rs1"] = self.string_to_decimal(instruction[12:17])
+            self.decoded["immediate"] = self.string_to_decimal(instruction[
+                                                              0:12])
+            self.decoded["type"] = "LW"
+
         elif opcode == "0100011":
             print("Store instruction")
+            self.decoded["opcode"] = opcode
+            self.decoded["funct3"] = instruction[17:20]
+            self.decoded["rs1"] = self.string_to_decimal(instruction[12:17])
+            self.decoded["rs2"] = self.string_to_decimal(instruction[7:12])
+            self.decoded["immediate"] = self.string_to_decimal(instruction[
+                                                             0:7] +
+                                                             instruction[
+                                                             20:25])
+            self.decoded["type"] = "SW"
+
         else:
             print("Halt instruction")
+            self.decoded["type"] = "HALT"
             self.state.IF["nop"] = True
 
     def step(self):
-        # Your implementation
+        if self.decoded is None:
+            self.decoded = dict()
 
+        if self.lastInstruction is not None and "type" in \
+                self.lastInstruction:
+            print("type: ", self.lastInstruction["type"])
+            if self.lastInstruction["type"] == "HALT":
+                self.halted = True
+
+        # Your implementation
         # 1. Instruction Fetch
         instruction = self.instruction_fetch()
         # Adder for the next PC.
@@ -156,7 +213,6 @@ class SingleStageCore(Core):
 
         # 2. Instruction Decode
         self.instruction_decode(instruction)
-
         if not self.state.IF["nop"]:
             self.state.IF["PC"] += 4
 
@@ -166,12 +222,7 @@ class SingleStageCore(Core):
 
         # 5. Write Back
 
-
-        if self.state.IF["nop"] and self.officialHalt:
-            self.halted = True
-        elif self.state.IF["nop"] and not self.officialHalt:
-            self.officialHalt = True
-
+        # PRINTING
         self.myRF.outputRF(self.cycle)  # dump RF
         self.printState(self.state,
                         self.cycle)  # print states after executing cycle 0, cycle 1, cycle 2 ...
@@ -179,6 +230,8 @@ class SingleStageCore(Core):
         # self.state = self.nextState  # The end of the cycle and updates the
         # current state with the values calculated in this cycle
         self.cycle += 1
+        self.lastInstruction = self.decoded
+        self.decoded = None
 
     def printState(self, state, cycle):
         printstate = ["-" * 70 + "\n",
