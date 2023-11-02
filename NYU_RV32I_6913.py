@@ -137,8 +137,14 @@ class SingleStageCore(Core):
             exponent -= 1
         return sum
 
-    def instruction_decode(self, instruction):
+    def branch_immediate(self, immediate):
+        pass
 
+    def jump_immediate(self, immediate):
+        pass
+
+    def instruction_decode(self, instruction):
+        self.state.ID["Instr"] = instruction
         opcode = instruction[25:32]
 
         # R Type
@@ -213,6 +219,7 @@ class SingleStageCore(Core):
 
         # 2. Instruction Decode
         self.instruction_decode(instruction)
+        print(self.state.ID)
         if not self.state.IF["nop"]:
             self.state.IF["PC"] += 4
 
