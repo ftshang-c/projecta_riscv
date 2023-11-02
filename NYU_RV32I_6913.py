@@ -45,7 +45,11 @@ class DataMem(object):
         self.id = name
         self.ioDir = ioDir
         with open(ioDir + "\\dmem.txt") as dm:
-            self.DMem = [data.replace("\n", "") for data in dm.readlines()]
+            self.DMem = [data.replace("\n", "") for data in
+                              dm.readlines()]
+        for i in range(len(self.DMem), MemSize):
+            self.DMem.append('00000000')
+
 
     def readInstr(self, ReadAddress):
         # read data memory
@@ -61,11 +65,17 @@ class DataMem(object):
         # write data into byte addressable memory
 
         binary_string = '{:032b}'.format(WriteData)
+        stored_string = ""
+        for character in binary_string:
+            if character == "-":
+                stored_string += "1"
+            else:
+                stored_string += character
 
-        self.DMem[Address] = binary_string[0:8]
-        self.DMem[Address + 1] = binary_string[8:16]
-        self.DMem[Address + 2] = binary_string[16:24]
-        self.DMem[Address + 3] = binary_string[24:32]
+        self.DMem[Address] = stored_string[0:8]
+        self.DMem[Address + 1] = stored_string[8:16]
+        self.DMem[Address + 2] = stored_string[16:24]
+        self.DMem[Address + 3] = stored_string[24:32]
 
     def outputDataMem(self):
         resPath = self.ioDir + "\\" + self.id + "_DMEMResult.txt"
@@ -76,7 +86,7 @@ class DataMem(object):
 class RegisterFile(object):
     def __init__(self, ioDir):
         self.outputFile = ioDir + "RFResult.txt"
-        self.Registers = [0x0 for i in range(32)]
+        self.Registers = ['{:032b}'.format(0) for i in range(32)]
 
     def readRF(self, Reg_addr):
         # Fill in
@@ -84,6 +94,10 @@ class RegisterFile(object):
 
     def writeRF(self, Reg_addr, Wrt_reg_data):
         # Fill in
+
+        if Reg_addr == 0:
+            return
+
         self.Registers[Reg_addr] = Wrt_reg_data
 
     def outputRF(self, cycle):
@@ -150,6 +164,7 @@ class SingleStageCore(Core):
         return sum
 
     def branch_immediate(self, immediate):
+        """Method that returns the decimal value of the branch immediate."""
         bit_12 = immediate[0]
         bit_11 = immediate[11]
         bit_10_to_5 = immediate[1:7]
@@ -165,6 +180,7 @@ class SingleStageCore(Core):
         return imm
 
     def jump_immediate(self, immediate):
+        """Method that returns the decimal value of the jump immediate."""
         bit_20 = immediate[0]
         bit_19_to_12 = immediate[12:20]
         bit_11 = immediate[11]
@@ -182,6 +198,7 @@ class SingleStageCore(Core):
         return imm
 
     def find_r_operation(self):
+        '''Method that finds the specific r operation name.'''
         funct3 = self.decoded["funct3"]
         funct7 = self.decoded["funct7"]
 
@@ -197,6 +214,7 @@ class SingleStageCore(Core):
             return "AND"
 
     def find_i_operation(self):
+        '''Method that finds the specific i operation name.'''
         funct3 = self.decoded["funct3"]
         if funct3 == "000":
             return "ADDI"
@@ -209,6 +227,7 @@ class SingleStageCore(Core):
 
 
     def find_b_operation(self):
+        '''Method that finds the specific branch operation name.'''
         funct3 = self.decoded["funct3"]
         if funct3 == "000":
             return "BEQ"
@@ -229,7 +248,7 @@ class SingleStageCore(Core):
             self.decoded["rs2"] = self.string_to_decimal(instruction[7:12])
             self.decoded["funct7"] = instruction[0:7]
             self.decoded["type"] = "R"
-            self.decoded["operation"] = self.find_r_operation()
+            self.decoded["name"] = self.find_r_operation()
 
         elif opcode == "0010011":
             print("I Type instruction.")
@@ -240,7 +259,7 @@ class SingleStageCore(Core):
             self.decoded["immediate"] = self.string_to_decimal(instruction[
                                                               0:12])
             self.decoded["type"] = "I"
-            self.decoded["operation"] = self.find_i_operation()
+            self.decoded["name"] = self.find_i_operation()
 
         elif opcode == "1101111":
             print("J type instruction.")
@@ -249,6 +268,7 @@ class SingleStageCore(Core):
             immediate_bits = instruction[0:20]
             self.decoded["immediate"] = self.jump_immediate(immediate_bits)
             self.decoded["type"] = "J"
+            self.decoded["name"] = "JAL"
 
 
         elif opcode == "1100011":
@@ -260,7 +280,7 @@ class SingleStageCore(Core):
             immediate_bits = instruction[0:7] + instruction[20:25]
             self.decoded["immediate"] = self.branch_immediate(immediate_bits)
             self.decoded["type"] = "B"
-            self.decoded["operation"] = self.find_b_operation()
+            self.decoded["name"] = self.find_b_operation()
 
         elif opcode == "0000011":
             print("Load instruction")
@@ -270,7 +290,8 @@ class SingleStageCore(Core):
             self.decoded["rs1"] = self.string_to_decimal(instruction[12:17])
             self.decoded["immediate"] = self.string_to_decimal(instruction[
                                                               0:12])
-            self.decoded["type"] = "LW"
+            self.decoded["type"] = "I"
+            self.decoded["name"] = "LW"
 
         elif opcode == "0100011":
             print("Store instruction")
@@ -282,129 +303,15 @@ class SingleStageCore(Core):
                                                              0:7] +
                                                              instruction[
                                                              20:25])
-            self.decoded["type"] = "SW"
+            self.decoded["type"] = "S"
+            self.decoded["name"] = "SW"
 
         else:
             print("Halt instruction")
             self.decoded["type"] = "HALT"
+            self.decoded["name"] = "HALT"
             self.state.IF["nop"] = True
             self.state.ID["nop"] = True
-
-    def execute_b_type(self):
-        # self.EX = {"nop": False, "Read_data1": 0, "Read_data2": 0, "Imm": 0,
-        #            "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "is_I_type": False,
-        #            "rd_mem": 0,
-        #            "wrt_mem": 0, "alu_op": 0, "wrt_enable": 0}
-
-        self.state.EX["Rs"] = self.decoded["rs1"]
-        self.state.EX["Imm"] = self.decoded["immediate"]
-        self.state.EX["Read_data1"] = self.myRF.readRF(self.decoded["rs1"])
-        self.state.EX["Read_data2"] = self.myRF.readRF(self.decoded["rs2"])
-
-        PC = self.state.IF["PC"]
-        immediate_data = self.decoded["immediate"]
-        self.state.EX["ALU_Output"] = PC + immediate_data
-
-    def execute_i_type(self):
-        # self.EX = {"nop": False, "Read_data1": 0, "Read_data2": 0, "Imm": 0,
-        #            "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "is_I_type": False,
-        #            "rd_mem": 0,
-        #            "wrt_mem": 0, "alu_op": 0, "wrt_enable": 0}
-
-        self.state.EX["Rs"] = self.decoded["rs1"]
-        self.state.EX["Imm"] = self.decoded["immediate"]
-        self.state.EX["Read_data1"] = self.myRF.readRF(self.decoded["rs1"])
-        self.state.EX["Wrt_reg_addr"] = self.decoded["rd"]
-        self.state.EX["wrt_enable"] = 1
-        self.state.EX["is_I_type"] = True
-        operation = self.decoded["operation"]
-
-        rs1_data = self.myRF.readRF(self.decoded["rs1"])
-        immediate_data = self.decoded["immediate"]
-
-        if operation == "ADDI":
-            self.state.EX["ALU_Output"] = rs1_data + immediate_data
-        elif operation == "XORI":
-            self.state.EX["ALU_Output"] = rs1_data ^ immediate_data
-        elif operation == "ORI":
-            self.state.EX["ALU_Output"] = rs1_data | immediate_data
-        else:
-            self.state.EX["ALU_Output"] = rs1_data & immediate_data
-
-    def execute_r_type(self):
-
-        # self.EX = {"nop": False, "Read_data1": 0, "Read_data2": 0, "Imm": 0,
-        #            "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "is_I_type": False,
-        #            "rd_mem": 0,
-        #            "wrt_mem": 0, "alu_op": 0, "wrt_enable": 0}
-
-        self.state.EX["Rs"] = self.decoded["rs1"]
-        self.state.EX["Rt"] = self.decoded["rs2"]
-        self.state.EX["Read_data1"] = self.myRF.readRF(self.decoded["rs1"])
-        self.state.EX["Read_data2"] = self.myRF.readRF(self.decoded["rs2"])
-        self.state.EX["Wrt_reg_addr"] = self.decoded["rd"]
-        self.state.EX["wrt_enable"] = 1
-        operation = self.decoded["operation"]
-
-        rs1_data = self.myRF.readRF(self.decoded["rs1"])
-        rs2_data = self.myRF.readRF(self.decoded["rs2"])
-
-        if operation == "ADD":
-            self.state.EX["ALU_Output"] = rs1_data + rs2_data
-        elif operation == "SUB":
-            self.state.EX["ALU_Output"] = rs1_data - rs2_data
-        elif operation == "XOR":
-            self.state.EX["ALU_Output"] = rs1_data ^ rs2_data
-        elif operation == "OR":
-            self.state.EX["ALU_Output"] = rs1_data | rs2_data
-        else:
-            self.state.EX["ALU_Output"] = rs1_data & rs2_data
-
-
-    def execute_j_type(self):
-        # self.EX = {"nop": False, "Read_data1": 0, "Read_data2": 0, "Imm": 0,
-        #            "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "is_I_type": False,
-        #            "rd_mem": 0,
-        #            "wrt_mem": 0, "alu_op": 0, "wrt_enable": 0}
-
-        self.state.EX["Wrt_reg_addr"] = self.decoded["rd"]
-        self.state.EX["Imm"] = self.decoded["immediate"]
-        immediate_data = self.decoded["immediate"]
-        self.state.EX["ALU_Output"] = self.state.IF["PC"] + immediate_data
-        self.state.EX["Adder"] = self.state.IF["PC"] + 4
-
-    def execute_lw_type(self):
-        # self.EX = {"nop": False, "Read_data1": 0, "Read_data2": 0, "Imm": 0,
-        #            "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "is_I_type": False,
-        #            "rd_mem": 0,
-        #            "wrt_mem": 0, "alu_op": 0, "wrt_enable": 0}
-
-        self.state.EX["Rs"] = self.decoded["rs1"]
-        self.state.EX["Imm"] = self.decoded["immediate"]
-        self.state.EX["Read_data1"] = self.myRF.readRF(self.decoded["rs1"])
-        self.state.EX["Wrt_reg_addr"] = self.decoded["rd"]
-        self.state.EX["wrt_enable"] = 1
-        self.state.EX["is_I_type"] = True
-        self.state.EX["rd_mem"] = 1
-        rs1_data = self.myRF.readRF(self.decoded["rs1"])
-        immediate_data = self.decoded["immediate"]
-        self.state.EX["ALU_Output"] = rs1_data + immediate_data
-
-    def execute_sw_type(self):
-        # self.EX = {"nop": False, "Read_data1": 0, "Read_data2": 0, "Imm": 0,
-        #            "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "is_I_type": False,
-        #            "rd_mem": 0,
-        #            "wrt_mem": 0, "alu_op": 0, "wrt_enable": 0}
-
-        self.state.EX["Rs"] = self.decoded["rs1"]
-        self.state.EX["Rt"] = self.decoded["rs2"]
-        self.state.EX["Imm"] = self.decoded["immediate"]
-        self.state.EX["Read_data1"] = self.myRF.readRF(self.decoded["rs1"])
-        self.state.EX["Read_data2"] = self.myRF.readRF(self.decoded["rs2"])
-        self.state.EX["wrt_mem"] = 1
-        rs1_data = self.myRF.readRF(self.decoded["rs1"])
-        immediate_data = self.decoded["immediate"]
-        self.state.EX["ALU_Output"] = rs1_data + immediate_data
 
     def step(self):
         if self.decoded is None:
@@ -429,32 +336,97 @@ class SingleStageCore(Core):
             self.state.IF["PC"] += 4
 
         # 3. Execute
-        type = self.decoded["type"]
-        if type == "HALT":
-            self.state.EX["nop"] = True
-        elif type == "R":
-            self.execute_r_type()
-        elif type == "I":
-            self.execute_i_type()
-        elif type == "B":
-            self.execute_b_type()
-        elif type == "J":
-            self.execute_j_type()
-        elif type == "LW":
-            self.execute_lw_type()
+        self.decoded["ALU_Result"] = None
+        self.decoded["PC_Adder"] = None
+        opname = self.decoded["name"]
+        if opname == "ADD":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"])) \
+                + \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs2"]))
+        elif opname == "SUB":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"])) \
+                - \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs2"]))
+        elif opname == "XOR":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"])) \
+                ^ \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs2"]))
+        elif opname == "OR":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"]))\
+                | \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs2"]))
+        elif opname == "AND":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"])) \
+                & \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs2"]))
+        elif opname == "ADDI":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"])) \
+                + \
+                self.decoded["immediate"]
+        elif opname == "XORI":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"])) \
+                ^ \
+                self.decoded["immediate"]
+        elif opname == "ORI":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"])) \
+                | \
+                self.decoded["immediate"]
+        elif opname == "ANDI":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"]))\
+                & \
+                self.decoded["immediate"]
+        elif opname == "JAL":
+            pass
+        elif opname == "BEQ":
+            pass
+        elif opname == "BNE":
+            pass
+        elif opname == "LW":
+            self.decoded["ALU_Result"] = self.string_to_decimal(
+                self.myRF.readRF(self.decoded["rs1"])) \
+                                         + \
+                                         self.decoded["immediate"]
+        elif opname == "SW":
+            self.decoded["ALU_Result"] = \
+                self.string_to_decimal(self.myRF.readRF(self.decoded["rs1"])) \
+                + self.decoded["immediate"]
         else:
-            self.execute_sw_type()
+            self.decoded["ALU_Result"] = "HALT"
 
-        print(self.state.EX)
         # 4. Memory Access
-        if self.decoded["type"] == "SW":
-            self.ext_dmem.writeDataMem(self.state.EX["ALU_Output"],
-                                       self.state.EX["Read_data2"])
-        elif self.decoded["type"] == "LW":
-            write_val = self.ext_dmem.readInstr(self.state.EX["ALU_Output"])
+        if opname == "LW":
+            self.decoded["read_data"] = self.ext_dmem.readInstr(
+                self.decoded["ALU_Result"])
+        elif opname == "SW":
+            self.ext_dmem.writeDataMem(self.decoded["ALU_Result"],
+                                       self.string_to_decimal(self.myRF.readRF(
+                                           self.decoded["rs2"])))
 
+        print(self.decoded)
         # 5. Write Back
-        self.myRF.writeRF(self.state.EX["Rt"], self.state.EX["ALU_Output"])
+        if self.decoded["type"] == "R":
+            binary_string = '{:032b}'.format(self.decoded["ALU_Result"])
+            self.myRF.writeRF(self.decoded["rd"], binary_string)
+        elif self.decoded["type"] == "I":
+            if self.decoded["name"] == "LW":
+                self.myRF.writeRF(self.decoded["rd"], self.decoded[
+                    "read_data"])
+            else:
+                self.myRF.writeRF(self.decoded["rd"], self.decoded[
+                    "ALU_Result"])
+        elif self.decoded["type"] == "B":
+            pass
+        elif self.decoded["type"] == "J":
+            pass
 
         # PRINTING
         self.myRF.outputRF(self.cycle)  # dump RF
