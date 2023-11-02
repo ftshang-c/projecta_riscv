@@ -57,30 +57,70 @@ class DataMem(object):
         str_value = ""
 
         for i in range(4):
-            str_value += self.DMem[ReadAddress + 1]
+            str_value += self.DMem[ReadAddress + i]
 
         return str_value
 
     def writeDataMem(self, Address, WriteData):
         # write data into byte addressable memory
 
-        binary_string = '{:032b}'.format(WriteData)
-        stored_string = ""
-        for character in binary_string:
-            if character == "-":
-                stored_string += "1"
-            else:
-                stored_string += character
+        binary_string = self.decimal_to_binary(WriteData)
 
-        self.DMem[Address] = stored_string[0:8]
-        self.DMem[Address + 1] = stored_string[8:16]
-        self.DMem[Address + 2] = stored_string[16:24]
-        self.DMem[Address + 3] = stored_string[24:32]
+        self.DMem[Address] = binary_string[0:8]
+        self.DMem[Address + 1] = binary_string[8:16]
+        self.DMem[Address + 2] = binary_string[16:24]
+        self.DMem[Address + 3] = binary_string[24:32]
 
     def outputDataMem(self):
         resPath = self.ioDir + "\\" + self.id + "_DMEMResult.txt"
         with open(resPath, "w") as rp:
             rp.writelines([str(data) + "\n" for data in self.DMem])
+
+    def decimal_to_binary(self, num):
+        all_bits = [0] * 32
+        negative = False
+        if num < 0:
+            negative = True
+
+        if num > pow(2, 31) - 1 or num < -pow(2, 31):
+            return
+
+        num = abs(num)
+
+        exponent = 31
+        counter = 0
+        while (num > 0):
+            if pow(2, exponent) <= num:
+                num -= pow(2, exponent)
+                all_bits[counter] = 1
+            exponent -= 1
+            counter += 1
+
+        if negative:
+            for i in range(len(all_bits)):
+                if all_bits[i] == 0:
+                    all_bits[i] = 1
+                else:
+                    all_bits[i] = 0
+            all_bits.reverse()
+            all_bits[0] += 1
+
+            # find carry
+            for i in range(len(all_bits) - 1):
+                if all_bits[i] == 2:
+                    all_bits[i] = 0
+                    all_bits[i + 1] += 1
+
+            if all_bits[31] == 2:
+                all_bits[31] = 0
+            all_bits.reverse()
+
+        bit_string = ""
+
+        for bit in all_bits:
+            bit_string += str(bit)
+
+        return bit_string
 
 
 class RegisterFile(object):
@@ -162,6 +202,7 @@ class SingleStageCore(Core):
                 sum += (pow(2, exponent) * int(s[i]))
             exponent -= 1
         return sum
+
 
     def branch_immediate(self, immediate):
         """Method that returns the decimal value of the branch immediate."""
@@ -414,17 +455,18 @@ class SingleStageCore(Core):
         print(self.decoded)
         # 5. Write Back
         if self.decoded["type"] == "R":
-            binary_string = '{:032b}'.format(self.decoded["ALU_Result"])
+            binary_string = self.ext_dmem.decimal_to_binary(self.decoded[
+                                                         "ALU_Result"])
             self.myRF.writeRF(self.decoded["rd"], binary_string)
+
         elif self.decoded["type"] == "I":
             if self.decoded["name"] == "LW":
                 self.myRF.writeRF(self.decoded["rd"], self.decoded[
                     "read_data"])
             else:
-                self.myRF.writeRF(self.decoded["rd"], self.decoded[
+                binary_string = self.ext_dmem.decimal_to_binary(self.decoded[
                     "ALU_Result"])
-        elif self.decoded["type"] == "B":
-            pass
+                self.myRF.writeRF(self.decoded["rd"], binary_string)
         elif self.decoded["type"] == "J":
             pass
 
