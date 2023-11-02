@@ -138,10 +138,36 @@ class SingleStageCore(Core):
         return sum
 
     def branch_immediate(self, immediate):
-        pass
+        bit_12 = immediate[0]
+        bit_11 = immediate[11]
+        bit_10_to_5 = immediate[1:7]
+        bit_4_to_1 = immediate[7:11]
+
+        ordered_immediate = bit_12 + bit_11
+        ordered_immediate += bit_10_to_5
+        ordered_immediate += bit_4_to_1
+        ordered_immediate += "0"
+
+        imm = self.string_to_decimal(ordered_immediate)
+
+        return imm
 
     def jump_immediate(self, immediate):
-        pass
+        bit_20 = immediate[0]
+        bit_19_to_12 = immediate[12:20]
+        bit_11 = immediate[11]
+        bit_10_to_5 = immediate[1:7]
+        bit_4_to_1 = immediate[7:11]
+
+        ordered_immediate = bit_20 + bit_19_to_12
+        ordered_immediate += bit_11
+        ordered_immediate += bit_10_to_5
+        ordered_immediate += bit_4_to_1
+        ordered_immediate += "0"
+
+        imm = self.string_to_decimal(ordered_immediate)
+
+        return imm
 
     def instruction_decode(self, instruction):
         self.state.ID["Instr"] = instruction
@@ -170,9 +196,22 @@ class SingleStageCore(Core):
 
         elif opcode == "1101111":
             print("J type instruction.")
+            self.decoded["opcode"] = opcode
+            self.decoded["rd"] = instruction[20:25]
+            immediate_bits = instruction[0:20]
+            self.decoded["immediate"] = self.jump_immediate(immediate_bits)
+            self.decoded["type"] = "J"
+
 
         elif opcode == "1100011":
             print("B type instruction")
+            self.decoded["opcode"] = opcode
+            self.decoded["funct3"] = instruction[17:20]
+            self.decoded["rs1"] = self.string_to_decimal(instruction[12:17])
+            self.decoded["rs2"] = self.string_to_decimal(instruction[7:12])
+            immediate_bits = instruction[0:7] + instruction[20:25]
+            self.decoded["immediate"] = self.branch_immediate(immediate_bits)
+            self.decoded["type"] = "B"
 
         elif opcode == "0000011":
             print("Load instruction")
@@ -200,6 +239,7 @@ class SingleStageCore(Core):
             print("Halt instruction")
             self.decoded["type"] = "HALT"
             self.state.IF["nop"] = True
+            self.state.ID["nop"] = True
 
     def step(self):
         if self.decoded is None:
@@ -219,7 +259,6 @@ class SingleStageCore(Core):
 
         # 2. Instruction Decode
         self.instruction_decode(instruction)
-        print(self.state.ID)
         if not self.state.IF["nop"]:
             self.state.IF["PC"] += 4
 
