@@ -305,12 +305,11 @@ class SingleStageCore(Core):
         elif opcode == "1101111":
             print("J type instruction.")
             self.decoded["opcode"] = opcode
-            self.decoded["rd"] = instruction[20:25]
+            self.decoded["rd"] = self.string_to_decimal(instruction[20:25])
             immediate_bits = instruction[0:20]
             self.decoded["immediate"] = self.jump_immediate(immediate_bits)
             self.decoded["type"] = "J"
             self.decoded["name"] = "JAL"
-
 
         elif opcode == "1100011":
             print("B type instruction")
@@ -373,12 +372,9 @@ class SingleStageCore(Core):
         # 2. Instruction Decode
         self.instruction_decode(instruction)
         print(self.decoded)
-        if not self.state.IF["nop"]:
-            self.state.IF["PC"] += 4
 
         # 3. Execute
         self.decoded["ALU_Result"] = None
-        self.decoded["PC_Adder"] = None
         opname = self.decoded["name"]
         if opname == "ADD":
             self.decoded["ALU_Result"] = \
@@ -426,11 +422,34 @@ class SingleStageCore(Core):
                 & \
                 self.decoded["immediate"]
         elif opname == "JAL":
-            pass
+            self.decoded["ALU_Result"] = self.state.IF["PC"] + self.decoded[
+                "immediate"]
+
         elif opname == "BEQ":
-            pass
+            rs1_value = self.string_to_decimal(self.myRF.readRF(self.decoded[
+                                                                "rs1"]))
+            rs2_value = self.string_to_decimal(self.myRF.readRF(
+                self.decoded["rs2"]))
+
+            if rs1_value == rs2_value:
+                self.decoded["ALU_Result"] = self.state.IF["PC"] + \
+                                             self.decoded["immediate"]
+            else:
+                self.decoded["ALU_Result"] = self.state.IF["PC"] + 4
+
         elif opname == "BNE":
-            pass
+            rs1_value = self.string_to_decimal(self.myRF.readRF(
+                self.decoded["rs1"]))
+
+            rs2_value = self.string_to_decimal(self.myRF.readRF(
+                self.decoded["rs2"]))
+
+            if rs1_value != rs2_value:
+                self.decoded["ALU_Result"] = self.state.IF["PC"] + \
+                                             self.decoded["immediate"]
+            else:
+                self.decoded["ALU_Result"] = self.state.IF["PC"] + 4
+
         elif opname == "LW":
             self.decoded["ALU_Result"] = self.string_to_decimal(
                 self.myRF.readRF(self.decoded["rs1"])) \
@@ -468,7 +487,18 @@ class SingleStageCore(Core):
                     "ALU_Result"])
                 self.myRF.writeRF(self.decoded["rd"], binary_string)
         elif self.decoded["type"] == "J":
+            self.myRF.writeRF(self.decoded["rd"], self.ext_dmem.
+                              decimal_to_binary(self.state.IF["PC"] + 4))
+
+
+        # Update PC
+        if self.decoded["type"] == "HALT":
             pass
+        elif self.decoded["type"] == "R" or self.decoded["type"] == "I" or \
+                self.decoded["type"] == "S":
+            self.state.IF["PC"] += 4
+        elif self.decoded["type"] == "B" or self.decoded["type"] == "J":
+            self.state.IF["PC"] = self.decoded["ALU_Result"]
 
         # PRINTING
         self.myRF.outputRF(self.cycle)  # dump RF
@@ -478,6 +508,8 @@ class SingleStageCore(Core):
         # self.state = self.nextState  # The end of the cycle and updates the
         # current state with the values calculated in this cycle
         self.cycle += 1
+
+        # update decoded instruction to last instruction.
         self.lastInstruction = self.decoded
         self.decoded = None
 
