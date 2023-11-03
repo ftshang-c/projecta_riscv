@@ -1,5 +1,5 @@
 import unittest
-from main import *
+from fs1014.main import *
 
 class TestStringMethods(unittest.TestCase):
 
