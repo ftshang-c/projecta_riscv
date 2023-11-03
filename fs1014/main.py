@@ -191,7 +191,6 @@ class SingleStageCore(Core):
         super(SingleStageCore, self).__init__(os.path.join(ioDir, "SS_"),
                                               imem, dmem)
         self.opFilePath = os.path.join(ioDir, "StateResult_SS.txt")
-        # self.decode = None
         self.decoded = None
         self.lastInstruction = None
         self.instruction_count = 0
@@ -649,25 +648,28 @@ if __name__ == "__main__":
 
             imem = InsMem("Imem", update_input_path)
             dmem_ss = DataMem("SS", update_input_path, update_output_path)
-            dmem_fs = DataMem("FS", update_input_path, update_output_path)
+            # dmem_fs = DataMem("FS", update_input_path, update_output_path)
             print(update_input_path)
             print(update_output_path)
 
             ssCore = SingleStageCore(update_output_path, imem, dmem_ss)
-            fsCore = FiveStageCore(update_output_path, imem, dmem_fs)
+            # fsCore = FiveStageCore(update_output_path, imem, dmem_fs)
 
             while (True):
                 if not ssCore.halted:
                     ssCore.step()
 
-                if not fsCore.halted:
-                    fsCore.step()
+                # if not fsCore.halted:
+                #     fsCore.step()
 
-                if ssCore.halted and fsCore.halted:
+                # if ssCore.halted and fsCore.halted:
+                #     break
+
+                if ssCore.halted:
                     break
 
             # dump SS and FS data mem.
             dmem_ss.outputDataMem()
-            dmem_fs.outputDataMem()
+            # dmem_fs.outputDataMem()
             ssCore.printPerformanceMetrics()
-            fsCore.printPerformanceMetrics()
+            # fsCore.printPerformanceMetrics()

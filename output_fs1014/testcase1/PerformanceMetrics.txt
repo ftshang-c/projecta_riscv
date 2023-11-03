@@ -3,9 +3,3 @@ Performance of Single Stage:
 #Instructions -> 39
 CPI -> 1.0256410256410255
 IPC -> 0.975
-
-Performance of Five Stage:
-#Cycles -> 1
-#Instructions -> 
-CPI -> 
-IPC -> 
