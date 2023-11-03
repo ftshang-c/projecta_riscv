@@ -82,8 +82,14 @@ class DataMem(object):
         if num < 0:
             negative = True
 
-        if num > pow(2, 31) - 1 or num < -pow(2, 31):
-            return
+        if num > pow(2, 31) - 1:
+            num = (-1 * pow(2, 31)) + (num - (pow(2, 31)))
+            negative = True
+
+        elif num < -pow(2, 31):
+            for i in range(2):
+                num += pow(2, 31)
+            negative = False
 
         num = abs(num)
 
