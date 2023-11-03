@@ -1,5 +1,5 @@
 import unittest
-from NYU_RV32I_6913 import *
+from main import *
 
 class TestStringMethods(unittest.TestCase):
 
