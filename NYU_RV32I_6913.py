@@ -186,6 +186,7 @@ class SingleStageCore(Core):
         self.opFilePath = ioDir + "\\StateResult_SS.txt"
         self.decoded = None
         self.lastInstruction = None
+        self.instruction_count = 0
 
     def instruction_fetch(self):
         PC_value = self.state.IF["PC"]
@@ -513,6 +514,9 @@ class SingleStageCore(Core):
         self.lastInstruction = self.decoded
         self.decoded = None
 
+        if not self.halted:
+            self.instruction_count += 1
+
     def printState(self, state, cycle):
         printstate = ["-" * 70 + "\n",
                       "State after executing cycle: " + str(cycle) + "\n"]
@@ -526,6 +530,16 @@ class SingleStageCore(Core):
         with open(self.opFilePath, perm) as wf:
             wf.writelines(printstate)
 
+    def printPerformanceMetrics(self):
+        with open("PerformanceMetrics.txt", "w") as file:
+            file.write("Performance of Single Stage:\n")
+            file.write("#Cycles -> " + str(self.cycle) + "\n")
+            file.write("#Instructions -> " + str(self.instruction_count) +
+                       "\n")
+            CPI = self.cycle / self.instruction_count
+            IPC = self.instruction_count / self.cycle
+            file.write("CPI -> " + str(CPI) + "\n")
+            file.write("IPC -> " + str(IPC) +"\n")
 
 class FiveStageCore(Core):
     def __init__(self, ioDir, imem, dmem):
@@ -578,6 +592,15 @@ class FiveStageCore(Core):
         with open(self.opFilePath, perm) as wf:
             wf.writelines(printstate)
 
+    def printPerformanceMetrics(self):
+        with open("PerformanceMetrics.txt", "a") as file:
+            file.write("\nPerformance of Five Stage:\n")
+            file.write("#Cycles -> " + str(self.cycle) + "\n")
+            file.write("#Instructions -> \n")
+            file.write("CPI -> \n")
+            file.write("IPC -> \n")
+
+
 
 if __name__ == "__main__":
 
@@ -611,3 +634,7 @@ if __name__ == "__main__":
     # dump SS and FS data mem.
     dmem_ss.outputDataMem()
     dmem_fs.outputDataMem()
+
+    # print out performance metrics
+    ssCore.printPerformanceMetrics()
+    fsCore.printPerformanceMetrics()
