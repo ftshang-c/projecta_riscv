@@ -41,16 +41,24 @@ class InsMem(object):
 
 
 class DataMem(object):
-    def __init__(self, name, input_path, output_path):
-        self.id = name
-        self.inDir = input_path
-        self.outDir = output_path
+    # def __init__(self, name, input_path, output_path):
+    #     self.id = name
+    #     self.inDir = input_path
+    #     self.outDir = output_path
+    #
+    #     with open(os.path.join(self.inDir, "dmem.txt")) as dm:
+    #         self.DMem = [data.replace("\n", "") for data in dm.readlines()]
+    #     for i in range(len(self.DMem), MemSize):
+    #         self.DMem.append('00000000')
 
-        with open(os.path.join(self.inDir, "dmem.txt")) as dm:
-            self.DMem = [data.replace("\n", "") for data in dm.readlines()]
+    def __init__(self, name, ioDir):
+        self.id = name
+        self.ioDir = ioDir
+        with open(ioDir + "\\dmem.txt") as dm:
+            self.DMem = [data.replace("\n", "") for data in
+                              dm.readlines()]
         for i in range(len(self.DMem), MemSize):
             self.DMem.append('00000000')
-
 
     def readInstr(self, ReadAddress):
         # read data memory
@@ -72,8 +80,12 @@ class DataMem(object):
         self.DMem[Address + 2] = binary_string[16:24]
         self.DMem[Address + 3] = binary_string[24:32]
 
+    # def outputDataMem(self):
+    #     resPath = os.path.join(self.outDir, f"{self.id}_DMEMResult.txt")
+    #     with open(resPath, "w") as rp:
+    #         rp.writelines([str(data) + "\n" for data in self.DMem])
     def outputDataMem(self):
-        resPath = os.path.join(self.outDir, f"{self.id}_DMEMResult.txt")
+        resPath = self.ioDir + "\\" + self.id + "_DMEMResult.txt"
         with open(resPath, "w") as rp:
             rp.writelines([str(data) + "\n" for data in self.DMem])
 
@@ -537,10 +549,21 @@ class SingleStageCore(Core):
         with open(self.opFilePath, perm) as wf:
             wf.writelines(printstate)
 
+    # def printPerformanceMetrics(self):
+    #     with open(os.path.join(self.ext_dmem.outDir,
+    #                            "PerformanceMetrics.txt"), "w") as \
+    #             file:
+    #         file.write("Performance of Single Stage:\n")
+    #         file.write("#Cycles -> " + str(self.cycle) + "\n")
+    #         file.write("#Instructions -> " + str(self.instruction_count) +
+    #                    "\n")
+    #         CPI = self.cycle / self.instruction_count
+    #         IPC = self.instruction_count / self.cycle
+    #         file.write("CPI -> " + str(CPI) + "\n")
+    #         file.write("IPC -> " + str(IPC) +"\n")
+
     def printPerformanceMetrics(self):
-        with open(os.path.join(self.ext_dmem.outDir,
-                               "PerformanceMetrics.txt"), "w") as \
-                file:
+        with open("PerformanceMetrics.txt", "w") as file:
             file.write("Performance of Single Stage:\n")
             file.write("#Cycles -> " + str(self.cycle) + "\n")
             file.write("#Instructions -> " + str(self.instruction_count) +
@@ -602,14 +625,76 @@ class FiveStageCore(Core):
         with open(self.opFilePath, perm) as wf:
             wf.writelines(printstate)
 
+    # def printPerformanceMetrics(self):
+    #     with open(os.path.join(self.ext_dmem.outDir, "PerformanceMetrics.txt"),"a") \
+    #             as file:
+    #         file.write("\nPerformance of Five Stage:\n")
+    #         file.write("#Cycles -> " + str(self.cycle) + "\n")
+    #         file.write("#Instructions -> \n")
+    #         file.write("CPI -> \n")
+    #         file.write("IPC -> \n")
+
     def printPerformanceMetrics(self):
-        with open(os.path.join(self.ext_dmem.outDir, "PerformanceMetrics.txt"),"a") \
-                as file:
+        with open("PerformanceMetrics.txt", "a") as file:
             file.write("\nPerformance of Five Stage:\n")
             file.write("#Cycles -> " + str(self.cycle) + "\n")
             file.write("#Instructions -> \n")
             file.write("CPI -> \n")
             file.write("IPC -> \n")
+
+# if __name__ == "__main__":
+#     # parse arguments for input file location
+#     parser = argparse.ArgumentParser(description='RV32I processor')
+#     parser.add_argument('--iodir', default="", type=str,
+#                         help='Directory containing the input files.')
+#     args = parser.parse_args()
+#     ioDir = os.path.abspath(args.iodir)
+#     # main_path = os.path.dirname(ioDir)
+#     print("IO Directory:", ioDir)
+#     # print("Main Path:", main_path)
+#     input_path = os.path.join(ioDir, "input")
+#     print("Input Path:", input_path)
+#     output_path = os.path.join(ioDir, "output_fs1014")
+#     if not os.path.exists(output_path):
+#         os.mkdir(output_path)
+#     print("Output Path:", output_path)
+#     for subdir, dirs, files in os.walk(input_path):
+#         for dir in dirs:
+#             update_input_path = input_path
+#             update_input_path = os.path.join(update_input_path, dir)
+#             update_output_path = output_path
+#             update_output_path = os.path.join(update_output_path, dir)
+#             print(update_output_path)
+#             if not os.path.exists(update_output_path):
+#                 os.mkdir(update_output_path)
+#
+#             imem = InsMem("Imem", update_input_path)
+#             dmem_ss = DataMem("SS", update_input_path, update_output_path)
+#             # dmem_fs = DataMem("FS", update_input_path, update_output_path)
+#             print(update_input_path)
+#             print(update_output_path)
+#
+#             ssCore = SingleStageCore(update_output_path, imem, dmem_ss)
+#             # fsCore = FiveStageCore(update_output_path, imem, dmem_fs)
+#
+#             while (True):
+#                 if not ssCore.halted:
+#                     ssCore.step()
+#
+#                 # if not fsCore.halted:
+#                 #     fsCore.step()
+#
+#                 # if ssCore.halted and fsCore.halted:
+#                 #     break
+#
+#                 if ssCore.halted:
+#                     break
+#
+#             # dump SS and FS data mem.
+#             dmem_ss.outputDataMem()
+#             # dmem_fs.outputDataMem()
+#             ssCore.printPerformanceMetrics()
+#             # fsCore.printPerformanceMetrics()
 
 if __name__ == "__main__":
 
@@ -620,56 +705,30 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     ioDir = os.path.abspath(args.iodir)
-    # main_path = os.path.dirname(ioDir)
 
     print("IO Directory:", ioDir)
-    # print("Main Path:", main_path)
 
-    input_path = os.path.join(ioDir, "input")
-    print("Input Path:", input_path)
-    output_path = os.path.join(ioDir, "output_fs1014")
+    imem = InsMem("Imem", ioDir)
+    dmem_ss = DataMem("SS", ioDir)
+    dmem_fs = DataMem("FS", ioDir)
 
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
+    ssCore = SingleStageCore(ioDir, imem, dmem_ss)
+    fsCore = FiveStageCore(ioDir, imem, dmem_fs)
 
-    print("Output Path:", output_path)
+    while (True):
+        if not ssCore.halted:
+            ssCore.step()
 
-    for subdir, dirs, files in os.walk(input_path):
-        for dir in dirs:
-            update_input_path = input_path
-            update_input_path = os.path.join(update_input_path, dir)
-            update_output_path = output_path
-            update_output_path = os.path.join(update_output_path, dir)
+        if not fsCore.halted:
+            fsCore.step()
 
-            print(update_output_path)
+        if ssCore.halted and fsCore.halted:
+            break
 
-            if not os.path.exists(update_output_path):
-                os.mkdir(update_output_path)
+    # dump SS and FS data mem.
+    dmem_ss.outputDataMem()
+    dmem_fs.outputDataMem()
 
-            imem = InsMem("Imem", update_input_path)
-            dmem_ss = DataMem("SS", update_input_path, update_output_path)
-            # dmem_fs = DataMem("FS", update_input_path, update_output_path)
-            print(update_input_path)
-            print(update_output_path)
-
-            ssCore = SingleStageCore(update_output_path, imem, dmem_ss)
-            # fsCore = FiveStageCore(update_output_path, imem, dmem_fs)
-
-            while (True):
-                if not ssCore.halted:
-                    ssCore.step()
-
-                # if not fsCore.halted:
-                #     fsCore.step()
-
-                # if ssCore.halted and fsCore.halted:
-                #     break
-
-                if ssCore.halted:
-                    break
-
-            # dump SS and FS data mem.
-            dmem_ss.outputDataMem()
-            # dmem_fs.outputDataMem()
-            ssCore.printPerformanceMetrics()
-            # fsCore.printPerformanceMetrics()
+    # print out performance metrics
+    ssCore.printPerformanceMetrics()
+    fsCore.printPerformanceMetrics()
