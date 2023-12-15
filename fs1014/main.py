@@ -1907,8 +1907,7 @@ class FiveStageCore(Core):
                             self.myRF.readRF(self.EX_STAGE["rs1"])) \
                         + self.EX_STAGE["immediate"]
                     self.EX_STAGE["write_data"] = \
-                        self.ext_dmem.decimal_to_binary(self.EX_STAGE[
-                                                            "ALU_Result"])
+                            self.myRF.readRF(self.EX_STAGE["rs2"])
                 elif no_forward_rs1 and ex_to_first_rs2:
                     self.EX_STAGE["ALU_Result"] = self.string_to_decimal(
                         self.myRF.readRF(self.EX_STAGE["rs1"])) + \
@@ -1937,19 +1936,28 @@ class FiveStageCore(Core):
                     self.EX_STAGE["ALU_Result"] = self.MEM_STAGE[
                         "ALU_Result"] + self.EX_STAGE[
                         "immediate"]
+                    self.EX_STAGE["write_data"] = self.myRF.readRF(
+                        self.EX_STAGE["rs2"])
+
                 elif ex_to_second_rs1 and no_forward_rs2:
                     self.EX_STAGE["ALU_Result"] = self.WB_STAGE[
                                                       "ALU_Result"] + \
                                                   self.EX_STAGE["immediate"]
+                    self.EX_STAGE["write_data"] = self.myRF.readRF(
+                        self.EX_STAGE["rs2"])
                 elif mem_to_first_rs1 and no_forward_rs2:
                     self.EX_STAGE["ALU_Result"] = self.string_to_decimal(
                         self.WB_STAGE["read_data"]) + self.EX_STAGE[
                         "immediate"]
+                    self.EX_STAGE["write_data"] = self.myRF.readRF(
+                        self.EX_STAGE["rs2"])
 
                 elif mem_to_second_rs1 and no_forward_rs2:
                     self.EX_STAGE["ALU_Result"] = self.string_to_decimal(
                         self.WB_STAGE["read_data"]) + self.EX_STAGE[
                         "immediate"]
+                    self.EX_STAGE["write_data"] = self.myRF.readRF(
+                        self.EX_STAGE["rs2"])
 
                 elif ex_to_first_rs1 and ex_to_first_rs2:
                     self.EX_STAGE["ALU_Result"] = self.MEM_STAGE[
