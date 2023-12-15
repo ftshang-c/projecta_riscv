@@ -825,13 +825,9 @@ class FiveStageCore(Core):
 
         # Update IF/ID Register
         if not self.is_NOP:
-            instruction = self.instruction_fetch()
-            self.instruction_decode(instruction, self.IF_STAGE)
-
-        if self.IF_STAGE["name"] == "HALT" or self.is_NOP:
-            pass
-        else:
-            self.state.IF["PC"] += 4
+            if self.state.IF["PC"] < len(self.ext_imem.IMem):
+                instruction = self.instruction_fetch()
+                self.instruction_decode(instruction, self.IF_STAGE)
 
         print("STAGES AFTER REGISTERS UPDATED:")
         print("IF:", self.IF_STAGE)
@@ -971,7 +967,7 @@ class FiveStageCore(Core):
                     self.myRF.writeRF(self.WB_STAGE["rd"], binary_string)
             elif self.WB_STAGE["type"] == "J":
                 self.myRF.writeRF(self.WB_STAGE["rd"], self.ext_dmem.
-                              decimal_to_binary(self.state.IF["PC"] + 4))
+                              decimal_to_binary(self.WB_STAGE["ALU_Result"]))
         elif "name" in self.WB_STAGE and self.WB_STAGE["name"] == "HALT":
             self.instruction_count += 1
 
@@ -989,7 +985,8 @@ class FiveStageCore(Core):
         # --------------------- EX stage ---------------------
         # 3. Execute
         if len(self.EX_STAGE) > 3:
-            self.EX_STAGE["ALU_Result"] = None
+            if "ALU_Result" not in self.EX_STAGE:
+                self.EX_STAGE["ALU_Result"] = None
             opname = self.EX_STAGE["name"]
             if opname == "ADD":
                 if no_forward_rs1 and no_forward_rs2:
@@ -1878,37 +1875,6 @@ class FiveStageCore(Core):
                         self.WB_STAGE["read_data"]) & self.EX_STAGE[
                                                       "immediate"]
 
-            elif opname == "JAL":
-                self.EX_STAGE["ALU_Result"] = self.state.IF["PC"] + \
-                                             self.EX_STAGE[
-                                                 "immediate"]
-
-            elif opname == "BEQ":
-                rs1_value = self.string_to_decimal(
-                    self.myRF.readRF(self.EX_STAGE[
-                                         "rs1"]))
-                rs2_value = self.string_to_decimal(self.myRF.readRF(
-                    self.EX_STAGE["rs2"]))
-
-                if rs1_value == rs2_value:
-                    self.EX_STAGE["ALU_Result"] = self.state.IF["PC"] + \
-                                                 self.EX_STAGE["immediate"]
-                else:
-                    self.EX_STAGE["ALU_Result"] = self.state.IF["PC"] + 4
-
-            elif opname == "BNE":
-                rs1_value = self.string_to_decimal(self.myRF.readRF(
-                    self.EX_STAGE["rs1"]))
-
-                rs2_value = self.string_to_decimal(self.myRF.readRF(
-                    self.EX_STAGE["rs2"]))
-
-                if rs1_value != rs2_value:
-                    self.EX_STAGE["ALU_Result"] = self.state.IF["PC"] + \
-                                                 self.EX_STAGE["immediate"]
-                else:
-                    self.EX_STAGE["ALU_Result"] = self.state.IF["PC"] + 4
-
             elif opname == "LW":
                 if no_forward_rs1:
                     self.EX_STAGE["ALU_Result"] = self.string_to_decimal(
@@ -1940,6 +1906,9 @@ class FiveStageCore(Core):
                         self.string_to_decimal(
                             self.myRF.readRF(self.EX_STAGE["rs1"])) \
                         + self.EX_STAGE["immediate"]
+                    self.EX_STAGE["write_data"] = \
+                        self.ext_dmem.decimal_to_binary(self.EX_STAGE[
+                                                            "ALU_Result"])
                 elif no_forward_rs1 and ex_to_first_rs2:
                     self.EX_STAGE["ALU_Result"] = self.string_to_decimal(
                         self.myRF.readRF(self.EX_STAGE["rs1"])) + \
@@ -2090,9 +2059,409 @@ class FiveStageCore(Core):
                         self.WB_STAGE["read_data"]) + self.EX_STAGE[
                         "immediate"]
                     self.EX_STAGE["write_data"] = self.WB_STAGE["read_data"]
-            else:
+            elif opname == "HALT":
                 self.EX_STAGE["ALU_Result"] = "HALT"
         # --------------------- ID stage ---------------------
+        # Check for forwarding!
+        rs1_in_id = False
+        rs2_in_id = False
+
+        # EX to 1st Instruction
+        ex_to_first_rs1 = False
+        ex_to_first_rs2 = False
+
+        # EX to 2nd Instruction
+        ex_to_second_rs1 = False
+        ex_to_second_rs2 = False
+
+        # MEM to 2nd Instruction
+        mem_to_second_rs1 = False
+        mem_to_second_rs2 = False
+
+        # MEM to 1st Instruction
+        mem_to_first_rs1 = False
+        mem_to_first_rs2 = False
+
+        id_no_forward_rs1 = True
+        id_no_forward_rs2 = True
+
+        # Check if rs1 in the current EX Stage.
+        if "rs1" in self.ID_STAGE:
+            rs1_in_id = True
+        # Check if rs2 is in the current EX Stage.
+        if "rs2" in self.ID_STAGE:
+            rs2_in_id = True
+
+        #  Check for EX to 1st, first operand.
+        if rs1_in_id:
+            rs1_source_operand = self.ID_STAGE["rs1"]
+            # Check if rd is in the EX/MEM register is the same as rs1.
+            if "rd" in self.EX_STAGE:
+                rd_source_operand = self.EX_STAGE["rd"]
+                if rs1_source_operand == rd_source_operand:
+                    ex_to_first_rs1 = True
+                    id_no_forward_rs1 = False
+
+        # Check for EX to 1st, second operand.
+        if rs2_in_id:
+            rs2_source_operand = self.ID_STAGE["rs2"]
+            if "rd" in self.EX_STAGE:
+                rd_source_operand = self.EX_STAGE["rd"]
+                if rs2_source_operand == rd_source_operand:
+                    ex_to_first_rs2 = True
+                    id_no_forward_rs2 = False
+
+        # Check EX to 2nd, first operand.
+        if rs1_in_id:
+            if not ex_to_first_rs1:
+                rs1_source_operand = self.ID_STAGE["rs1"]
+                if "rd" in self.MEM_STAGE and self.MEM_STAGE["name"] != "LW":
+                    rd_source_operand = self.MEM_STAGE["rd"]
+                    if rs1_source_operand == rd_source_operand:
+                        ex_to_second_rs1 = True
+                        id_no_forward_rs1 = False
+
+        # Check EX to 2nd, second operand.
+        if rs2_in_id:
+            if not ex_to_first_rs2:
+                rs2_source_operand = self.ID_STAGE["rs2"]
+                if "rd" in self.MEM_STAGE and self.MEM_STAGE["name"] != "LW":
+                    rd_source_operand = self.MEM_STAGE["rd"]
+                    if rs2_source_operand == rd_source_operand:
+                        ex_to_second_rs2 = True
+                        id_no_forward_rs2 = False
+
+        # Check MEM to 2nd, first operand.
+        if rs1_in_id:
+            if not ex_to_first_rs1 and not ex_to_second_rs1:
+                rs1_source_operand = self.ID_STAGE["rs1"]
+                if "rd" in self.MEM_STAGE and self.MEM_STAGE["name"] == "LW":
+                    rd_source_operand = self.MEM_STAGE["rd"]
+                    if rs1_source_operand == rd_source_operand:
+                        mem_to_second_rs1 = True
+                        id_no_forward_rs1 = False
+
+        # Check MEM to 2nd, second operand.
+        if rs2_in_id:
+            if not ex_to_first_rs2 and not ex_to_second_rs2:
+                rs2_source_operand = self.ID_STAGE["rs2"]
+                if "rd" in self.MEM_STAGE and self.MEM_STAGE["name"] == "LW":
+                    rd_source_operand = self.MEM_STAGE["rd"]
+                    if rs2_source_operand == rd_source_operand:
+                        mem_to_second_rs2 = True
+                        id_no_forward_rs2 = False
+
+        # Check MEM to 1st, first operand.
+        if rs1_in_id:
+            if not ex_to_first_rs1 and not ex_to_second_rs1 and not \
+                    mem_to_second_rs1:
+                rs1_source_operand = self.ID_STAGE["rs1"]
+                if "name" in self.EX_STAGE and self.EX_STAGE["name"] == \
+                        "NOP" and "rd" in self.MEM_STAGE:
+                    rd_source_operand = self.MEM_STAGE["rd"]
+                    if rs1_source_operand == rd_source_operand:
+                        mem_to_first_rs1 = True
+                        id_no_forward_rs1 = False
+
+        # Check MEM to 1st, second operand.
+        if rs2_in_id:
+            if not ex_to_first_rs2 and not ex_to_second_rs2 and not \
+                    mem_to_second_rs2:
+                rs2_source_operand = self.ID_STAGE["rs2"]
+                if self.EX_STAGE["name"] == "NOP" and "rd" in self.MEM_STAGE:
+                    rd_source_operand = self.MEM_STAGE["rd"]
+                    if rs2_source_operand == rd_source_operand:
+                        mem_to_first_rs2 = True
+                        id_no_forward_rs2 = False
+
+        branch_taken = False
+        if "name" in self.ID_STAGE:
+            if self.ID_STAGE["name"] == "BEQ":
+                rs1_value = 0
+                rs2_value = 0
+                if id_no_forward_rs1 and id_no_forward_rs2:
+                    rs1_value = self.string_to_decimal(
+                        self.myRF.readRF(self.ID_STAGE[
+                                             "rs1"]))
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif no_forward_rs1 and ex_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs1"]))
+                    rs2_value = self.EX_STAGE["ALU_Result"]
+
+                elif no_forward_rs1 and ex_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs1"]))
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif no_forward_rs1 and mem_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs1"]))
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                        "read_data"])
+
+                elif no_forward_rs1 and mem_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs1"]))
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif ex_to_first_rs1 and no_forward_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif ex_to_second_rs1 and no_forward_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif mem_to_first_rs1 and no_forward_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif mem_to_second_rs1 and no_forward_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif ex_to_first_rs1 and ex_to_first_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.EX_STAGE["ALU_Result"]
+
+                elif ex_to_first_rs1 and ex_to_second_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif ex_to_first_rs1 and mem_to_first_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif ex_to_first_rs1 and mem_to_second_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif ex_to_second_rs1 and ex_to_first_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.EX_STAGE["ALU_Result"]
+
+                elif ex_to_second_rs1 and ex_to_second_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif ex_to_second_rs1 and mem_to_first_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif ex_to_second_rs1 and mem_to_second_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif mem_to_first_rs1 and ex_to_first_rs2:
+                    pass
+
+                elif mem_to_first_rs1 and ex_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif mem_to_first_rs1 and mem_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif mem_to_first_rs1 and mem_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif mem_to_second_rs1 and ex_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.EX_STAGE["ALU_Result"]
+
+                elif mem_to_second_rs1 and ex_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif mem_to_second_rs1 and mem_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif mem_to_second_rs1 and mem_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                if rs1_value == rs2_value:
+                    self.state.IF["PC"] = self.state.IF["PC"] - 4 + \
+                                                  self.ID_STAGE[
+                                                      "immediate"]
+                    branch_taken = True
+
+            elif self.ID_STAGE["name"] == "BNE":
+                rs1_value = 0
+                rs2_value = 0
+                if id_no_forward_rs1 and id_no_forward_rs2:
+                    rs1_value = self.string_to_decimal(
+                        self.myRF.readRF(self.ID_STAGE[
+                                             "rs1"]))
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif id_no_forward_rs1 and ex_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs1"]))
+                    rs2_value = self.EX_STAGE["ALU_Result"]
+
+                elif id_no_forward_rs1 and ex_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs1"]))
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif id_no_forward_rs1 and mem_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs1"]))
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif id_no_forward_rs1 and mem_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs1"]))
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif ex_to_first_rs1 and id_no_forward_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif ex_to_second_rs1 and id_no_forward_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif mem_to_first_rs1 and id_no_forward_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif mem_to_second_rs1 and id_no_forward_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.myRF.readRF(
+                        self.ID_STAGE["rs2"]))
+
+                elif ex_to_first_rs1 and ex_to_first_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.EX_STAGE["ALU_Result"]
+
+                elif ex_to_first_rs1 and ex_to_second_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif ex_to_first_rs1 and mem_to_first_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif ex_to_first_rs1 and mem_to_second_rs2:
+                    rs1_value = self.EX_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif ex_to_second_rs1 and ex_to_first_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.EX_STAGE["ALU_Result"]
+
+                elif ex_to_second_rs1 and ex_to_second_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif ex_to_second_rs1 and mem_to_first_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif ex_to_second_rs1 and mem_to_second_rs2:
+                    rs1_value = self.MEM_STAGE["ALU_Result"]
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif mem_to_first_rs1 and ex_to_first_rs2:
+                    pass
+
+                elif mem_to_first_rs1 and ex_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif mem_to_first_rs1 and mem_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif mem_to_first_rs1 and mem_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif mem_to_second_rs1 and ex_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.EX_STAGE["ALU_Result"]
+
+                elif mem_to_second_rs1 and ex_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.MEM_STAGE["ALU_Result"]
+
+                elif mem_to_second_rs1 and mem_to_first_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                elif mem_to_second_rs1 and mem_to_second_rs2:
+                    rs1_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+                    rs2_value = self.string_to_decimal(self.MEM_STAGE[
+                                                           "read_data"])
+
+                if rs1_value != rs2_value:
+                    self.state.IF["PC"] = self.state.IF["PC"] - 4 + \
+                                          self.ID_STAGE[
+                                              "immediate"]
+                    branch_taken = True
+
+            elif self.ID_STAGE["name"] == "JAL":
+                self.ID_STAGE["ALU_Result"] = self.state.IF["PC"]
+                self.state.IF["PC"] = self.state.IF["PC"] - 4 + self.ID_STAGE[
+                    "immediate"]
+                branch_taken = True
+
+        if branch_taken:
+            newIFStage = dict()
+            newIFStage["name"] = "NOP"
+            self.IF_STAGE = newIFStage
 
         print("STAGES AFTER CYCLE IS OVER:")
         print("IF:", self.IF_STAGE)
@@ -2102,6 +2471,11 @@ class FiveStageCore(Core):
         print("WB:", self.WB_STAGE)
 
         # --------------------- IF stage ---------------------
+
+        if self.IF_STAGE["name"] == "HALT" or self.is_NOP or branch_taken:
+            pass
+        else:
+            self.state.IF["PC"] += 4
 
         if (self.IF_STAGE["name"] == "HALT" and self.ID_STAGE["name"] ==
                 "HALT" and self.EX_STAGE["name"] == "HALT" and
@@ -2244,9 +2618,9 @@ if __name__ == "__main__":
     fsCore = FiveStageCore(ioDir, imem, dmem_fs)
 
     while (True):
-        if not ssCore.halted:
-            print("SINGLE STAGE PIPELINE")
-            ssCore.step()
+        # if not ssCore.halted:
+        #     print("SINGLE STAGE PIPELINE")
+        #     ssCore.step()
 
         if not fsCore.halted:
             print("5 STAGE PIPELINE")
@@ -2255,13 +2629,13 @@ if __name__ == "__main__":
         if fsCore.halted:
             break
 
-        if ssCore.halted and fsCore.halted:
-            break
+        # if ssCore.halted and fsCore.halted:
+        #     break
 
     # dump SS and FS data mem.
     dmem_ss.outputDataMem()
     dmem_fs.outputDataMem()
 
     # print out performance metrics
-    ssCore.printPerformanceMetrics()
+    # ssCore.printPerformanceMetrics()
     fsCore.printPerformanceMetrics()
